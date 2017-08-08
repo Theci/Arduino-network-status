@@ -1,39 +1,23 @@
-#include <JsonListener.h>
-#include <JsonStreamingParser.h>
-#include <HttpClient.h>
+#include <ArduinoHttpClient.h>
 #include <SPI.h>
 #include <Ethernet2.h>
+#include <ArduinoJson.h>
 
 // NEtwork configuration
 byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0xFA, 0x91};
-
 // Setup the httpclient
-EthernetClient client;
-HttpClient http(client);
-
-// Setup JSON engine
-JsonStreamingParser parser;
-ExampleListener listener;
+EthernetClient eth;
 
 void setup() {
   // Serial connection setup
-  Serial.begin(9600);
+  Serial.begin(115200);
   // Ethernet connection setup
-  Serial.println("Connecting to the internet.");
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP");
     while(true){
       // If the network fails, no use to continue
     }
   }
-
-  Serial.println("Internet connection established.");
-  printIPAddress();
-  delay(500);
-
-  // HTTP GET request setup
-  Serial.println("Establishing server connection.");
-  httpGetRequest("kelder.zeus.ugent.be",80,"/slotmachien/","application/json");
 }
 
 void loop() {
@@ -45,76 +29,61 @@ void loop() {
       break;
     case 2:
       Serial.println("Renewed success");
-      printIPAddress();
       break;
     case 3:
       Serial.println("Error: rebind fail");
       break;
     case 4:
       Serial.println("Rebind success");
-      printIPAddress();
       break;
     default:
       break;
   }
 
+  delay(5000);
+  // JSON responses can get long, String makes it so it can catch all of them
+  String resp;
   // If the ethernetclient disconnects, send new request later on
-  if (!client.connected()) {
-    Serial.println();
-    Serial.println("Waiting 10 seconds for next request ...");
-    delay(10000);
-    httpGetRequest("kelder.zeus.ugent.be",80,"/slotmachien/","application/json");
+  if (!eth.connected()) {
+    resp = httpGetRequest("demo.robustperception.io",9090,"/api/v1/query?query=up{job=\"node\"}","application/json", &resp);
+    jsonToData(&resp);
   }
+  delay(5000);
 }
 
-void printIPAddress()
-{
-  Serial.print("My IP address: ");
-  for (byte thisByte = 0; thisByte < 4; thisByte++) {
-    Serial.print(Ethernet.localIP()[thisByte], DEC);
-    Serial.print(".");
-  }
-  Serial.println();
-}
-
-void httpGetRequest(const char *host, uint16_t port, const char * URLpath, const char* contType){
-  int err = 0; //Var to catch errors
+String httpGetRequest(const char *host, uint16_t port, const char * URLpath, const char* contType){
+  HttpClient http = HttpClient(eth,host,port); // Start httpClient
+  int statusCode = 0; //Var to catch errors
+  int err = 0;
+  String response;
   // With library
   http.beginRequest(); // Start HTTP request
   //Create the basis of the HTTP request: target,port,path,type,auth
-  err = http.startRequest(host,port,URLpath,HTTP_METHOD_GET,NULL);
+  err = http.get(URLpath);
   // Set content-type
-  http.sendHeader("content-type",contType);
+  http.sendHeader(HTTP_HEADER_CONTENT_TYPE,contType);
   http.endRequest(); // Terminate request and send
-  if(err == 0){
-    err = http.responseStatusCode();
-    if (err >= 200 && err <=299){
-      // Skip over the response header
-      err = http.skipResponseHeaders();
-      if(err>=0){
-        char c;
-        // When there's data incoming or we are connected, output
-        while(http.connected()||http.available()){
-          // Print body
-          if(http.available()){
-            c = http.read;
-            Serial.print(c);            
-          }else{
-          // If no data incoming, wait x miliseconds
-            delay(50);
-          }
-        }
-      }else{
-        Serial.println("Couldn't skip headers:");
-        Serial.println(err);
-      }
+  if(err == 0){ // See if there are problems with the request
+     statusCode = http.responseStatusCode();
+    if (statusCode >= 200 && err <=299){ // Check http status code
+      response = http.responseBody(); // Fetch response body
     }else{
       Serial.println("Wrong status code (<200 or >299):");
-      Serial.println(err);
+      Serial.println(statusCode);
     }
   }else{
     Serial.println("Connection failed:");
     Serial.println(err);
   }
   http.stop();
+  return response;
+}
+
+void jsonToData(const String *response){
+  // Buffer size needs to be picked well, can overload memory size causing arduino to freeze
+  StaticJsonBuffer<300> jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(*response);
+  const char *status = root["status"];
+  Serial.println("JSON output:");
+  Serial.println(status);
 }
