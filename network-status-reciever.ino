@@ -2,24 +2,34 @@
 #include <Ethernet2.h>
 #include <ArduinoJson.h>
 
+#define R 3
+#define G 5
+#define B 6
+
 // Setup the httpclient
 EthernetServer server = EthernetServer(18080);
 
-const char *status;
+const char *status = "ok";
 
 void setup() {
+  pinMode(R,OUTPUT);
+  pinMode(G,OUTPUT);
+  pinMode(B,OUTPUT);
   Serial.begin(9600);
   while(!initEthernet()){
     // If init fails, keep retrying
   }
   server.begin();
+  setStatusLed(&status);
 }
 
 void loop() {
   maintainEthernet();
-  if(handleIcoming(&status)){
+  bool processed = handleIcoming(&status);
+  if(processed){
     setStatusLed(&status);
   }
+  processed = false;
 }
 
 bool initEthernet(){
@@ -86,19 +96,36 @@ bool handleIcoming(const char **status){
     client.println(*status);
     client.stop();
     return true;
+  }else{
+    return false;
   }
 
 }
 
+void ledOff(){
+  setLedColor(0,0,0);
+}
+
+void setLedColor(int red, int green, int blue) {
+  analogWrite(R,red);
+  analogWrite(G,green);
+  analogWrite(B,blue);
+}
+
+void updateLedColor(int red, int green, int blue){
+  ledOff();
+  setLedColor(red,green,blue);
+}
+
 void setStatusLed(const char **const status){
-  if(*status == "ok"){
-    // Set the LED to green
-  }else if(*status == "warning"){
-    // Set the LED to orange
-  }else if (*status == "critical"){
-    // Set the LED to red
+  if(strcmp(*status,"ok")==0){
+    updateLedColor(0,255,0);
+  }else if(strcmp(*status,"warning")==0){
+    updateLedColor(255,140,0);
+  }else if (strcmp(*status,"critical")==0){
+    updateLedColor(255,0,0);
   }else{
-    // By default turn amber -> unkown
+    updateLedColor(0,0,255);// By default turn amber -> unkown
   }
   /*
   Can you switch ... cases on char *? Look into it and if possible implement
