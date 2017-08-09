@@ -76,7 +76,7 @@ bool skipRespHeaders(EthernetClient *client){
 bool handleIcoming(const char **status){
   EthernetClient client = server.available();
   if(client && skipRespHeaders(&client)){
-    StaticJsonBuffer<32> jsonBuffer;
+    StaticJsonBuffer<64> jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(client);
     if (!root.success()) {
       client.println("HTTP/1.1 500 ERROR");
