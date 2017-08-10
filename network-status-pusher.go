@@ -3,54 +3,70 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 )
 
-const promHost string = "10.3.10.10"
+var (
+	alertm Alertmanager
+	status map[string]string
+)
 
-// ArduinoPayload to send to Arduin
+// ArduinoPayload payload sized for arduino
 type ArduinoPayload struct {
 	Target string `json:"target"`
 	Status string `json:"status"`
 }
 
-// LargePayload to be send to more powerful devices
-type LargePayload struct {
-	Target string `json:"target"`
-	Status string `json:"status"`
+// Alertmanager holds data coming from the Alertmanager webhook
+type Alertmanager struct {
+	Status string  `json:"status"`
+	Alerts []Alert `json:"alerts"`
 }
 
-// ICMPResp catches the respons from Prom about ICMP pings
-type ICMPResp struct {
-	Host    string `json:"instance"`
-	Success string `json:"value[1]"`
+// Alert holds a single alert
+type Alert struct {
+	Labels interface{} `json:"labels"`
 }
 
 func main() {
-	var status map[string]string
 	status = make(map[string]string)
-	status["10.3.21.14"] = "critical"
+	http.HandleFunc("/alerts", HandleIncoming)
+	log.Fatal(http.ListenAndServe(":18081", nil))
+}
+
+func prog() {
+	AlertmanagerUpdate(&status)
 	SendArduinoMap(&status)
 }
 
-// PromQuery ...
-func PromQuery(host string, query string) http.Response {
-	resp, err := http.Get("http://" + host + ":9090/api/v1/query?" + query)
-	if err != nil {
-		panic(err)
+// HandleIncoming handles incoming requests from Alertmanager
+func HandleIncoming(w http.ResponseWriter, req *http.Request) {
+	json.NewDecoder(req.Body).Decode(&alertm)
+	req.Body.Close()
+	prog()
+	return
+}
+
+// AlertmanagerUpdate update the status map with new data from Alertmanager
+func AlertmanagerUpdate(m *map[string]string) {
+	targetStat := "10.3.21.14"
+	log.Print("Updating map ...")
+	for i := range alertm.Alerts {
+		alert := alertm.Alerts[i]
+		//target := (alert.Labels.(map[string]interface{})["instance"]).(string)
+		if alertm.Status == "resolved" {
+			(*m)[targetStat] = "ok"
+		} else {
+			(*m)[targetStat] = (alert.Labels.(map[string]interface{})["severity"]).(string)
+		}
 	}
-	return *resp
+	log.Print("Map updated:")
+	log.Println(*m)
 }
 
-// PingStatus ...
-func PingStatus(m *map[string]string) map[string]string {
-	//resp := PromQuery(promHost, "probe_success")
-	return *m
-}
-
-// SendArduinoMap ...
+// SendArduinoMap process the targets in the map and send the data to the arduinos
 func SendArduinoMap(m *map[string]string) {
 	for k, v := range *m {
 		json := ArduinoPayload{Target: k, Status: v}
@@ -68,24 +84,8 @@ func SendArduino(target *string, data *ArduinoPayload) {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
+	log.Println("response Status:", resp.Status)
+	log.Println("response Headers:", resp.Header)
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
-}
-
-// SendLarge : POST the Large payload to the target
-func SendLarge(data *LargePayload) {
-	buf := new(bytes.Buffer)
-	json.NewEncoder(buf).Encode(*data)
-	resp, err := http.Post((*data).Target, "application/json; charset=utf-8", buf)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
+	log.Println("response Body:", string(body))
 }
