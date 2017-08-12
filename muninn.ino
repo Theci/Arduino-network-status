@@ -102,6 +102,20 @@ bool handleIcoming(const char **status){
 
 }
 
+void setStatusLed(const char **const status){
+  if(strcmp(*status,"ok")==0){
+    updateLedColor(0,255,0);
+  }else if(strcmp(*status,"warning")==0){
+    updateLedColor(255,140,0);
+  }else if (strcmp(*status,"critical")==0){
+    updateLedColor(255,0,0);
+  }else if (strcmp(*status,"demo")==0){
+    ledDemo();
+  }else{
+    updateLedColor(0,0,255);// By default turn amber -> unkown
+  }
+}
+
 void ledOff(){
   setLedColor(0,0,0);
 }
@@ -117,25 +131,29 @@ void updateLedColor(int red, int green, int blue){
   setLedColor(red,green,blue);
 }
 
-void setStatusLed(const char **const status){
-  if(strcmp(*status,"ok")==0){
-    updateLedColor(0,255,0);
-  }else if(strcmp(*status,"warning")==0){
-    updateLedColor(255,140,0);
-  }else if (strcmp(*status,"critical")==0){
-    updateLedColor(255,0,0);
-  }else{
-    updateLedColor(0,0,255);// By default turn amber -> unkown
+void ledDemo(){
+  ledOff();
+  int red=1, green=1, blue=1;
+  for (red=2;red<=255;red++){
+    setLedColor(red,green,blue);
+    delay(3);
   }
-  /*
-  Can you switch ... cases on char *? Look into it and if possible implement
-  case "ok": // Set the LED to green
-  break;
-  case "warning": // Set the LED to orange
-  break;
-  case "critical": // Set the LED to red
-  break;
-  default: // By default turn amber -> unkown
-  break;
-  */
+
+  for (green=2;green<=255;green++){
+    setLedColor(red,green,blue);
+    red-=1;
+    delay(3);
+  }
+ 
+  for (blue=2;blue<=255;blue++){
+    setLedColor(red,green,blue);
+    green-=1;
+    delay(3);
+  }
+
+  for (red=2;red<=255;red++){
+    setLedColor(red,green,blue);
+    blue-=1;
+    delay(3);
+  }
 }
